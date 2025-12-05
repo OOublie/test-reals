@@ -93,13 +93,13 @@
         // --- QuestionCard 组件 ---
         const QuestionCard = React.memo(({ question, index, mode, isCurrent, isDarkMode, favorites, toggleFavorite, showAnswer, setShowAnswer, totalQuestions }) => {
             const isRecitation = mode === 'recitation';
-            // 背题模式下答案始终显示
+            // 背题下答案始终显示
             const displayAnswer = isRecitation || showAnswer;
             
             // 计算进度条百分比
             const progressPercent = totalQuestions > 0 ? ((index + 1) / totalQuestions) * 100 : 0;
 
-            // 仅在刷题模式下，点击问题切换答案
+            // 仅在刷题下，点击问题切换答案
             const handleCardClick = () => {
                 if (isCurrent && !isRecitation) {
                     setShowAnswer(prev => !prev);
@@ -138,7 +138,7 @@
                                     </div>
                                 </div>
                             </div>
-                            {/* 仅在刷题模式下显示提示 */}
+                            {/* 仅在刷题下显示提示 */}
                             {!isRecitation && (
                                 <div className={`mt-4 text-center text-xs ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>
                                     再次点击问题隐藏答案
@@ -512,13 +512,13 @@
                                         onClick={() => setMode('quiz')}
                                         className={`px-3 py-1 rounded-full transition-colors active:scale-95 ${mode === 'quiz' ? 'bg-blue-500 text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}
                                     >
-                                        刷题模式
+                                        刷题
                                     </button>
                                     <button 
                                         onClick={() => setMode('recitation')}
                                         className={`px-3 py-1 rounded-full transition-colors active:scale-95 ${mode === 'recitation' ? 'bg-blue-500 text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}
                                     >
-                                        背题模式
+                                        背题
                                     </button>
                                 </div>
                             </div>
