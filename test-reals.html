@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>复习提纲刷题器</title>
+    <!-- 引入 React 和 ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- 引入 Babel 用于解析 JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 js-yaml -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+    <!-- 引入 Lucide 图标 -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        /* Tailwind 配置 */
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    boxShadow: {
+                        'ios': '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)',
+                        'ios-hover': '0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04)',
+                        'glow': '0 0 15px rgba(0, 122, 255, 0.3)'
+                    }
+                }
+            }
+        };
+
+        /* 全局样式 */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            transition: background-color 0.3s ease, color 0.3s ease;
+            /* 确保页面高度为视口高度，且不能滚动 */
+            height: 100vh;
+            overflow: hidden;
+            background-color: #F2F2F7;
+        }
+        .dark body {
+            background-color: #000000;
+        }
+
+        /* TikTok 滚动容器 */
+        .snap-scroll-y {
+            height: 100vh;
+            overflow-y: scroll;
+            scroll-snap-type: y mandatory;
+            -webkit-overflow-scrolling: touch; /* 启用 iOS 弹性滚动 */
+        }
+
+        /* 每个题目卡片占据完整视口 */
+        .snap-item {
+            scroll-snap-align: start;
+            min-height: 100vh; /* 确保占据整个视口 */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* 磨砂玻璃效果 */
+        .backdrop-blur-md {
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        /* 隐藏滚动条 */
+        .snap-scroll-y::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+</head>
+<body class="antialiased selection:bg-blue-500 selection:text-white transition-colors duration-300">
+    <div id="root" class="h-full"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // --- 图标组件封装 ---
+        const Icon = ({ name, className = "" }) => (
+            <span 
+                style={{ display: 'contents' }}
+                dangerouslySetInnerHTML={{ 
+                    __html: `<i data-lucide="${name}" class="${className}"></i>` 
+                }}
+            />
+        );
+        
+        // --- QuestionCard 组件 ---
+        const QuestionCard = React.memo(({ question, index, mode, isCurrent, isDarkMode, favorites, toggleFavorite, showAnswer, setShowAnswer, totalQuestions }) => {
+            const isRecitation = mode === 'recitation';
+            // 背题模式下答案始终显示
+            const displayAnswer = isRecitation || showAnswer;
+            
+            // 计算进度条百分比
+            const progressPercent = totalQuestions > 0 ? ((index + 1) / totalQuestions) * 100 : 0;
+
+            // 仅在刷题模式下，点击问题切换答案
+            const handleCardClick = () => {
+                if (isCurrent && !isRecitation) {
+                    setShowAnswer(prev => !prev);
+                }
+            };
+
+            const CardBody = (
+                <div className="flex-1 p-8 pt-20 flex flex-col items-center justify-center text-center relative max-w-2xl mx-auto w-full">
+                    
+                    {/* 1. 问题 */}
+                    <div 
+                        onClick={handleCardClick}
+                        className={`w-full cursor-pointer transition-all duration-300 ${displayAnswer ? 'mb-8 opacity-100' : 'mb-0 opacity-100'}`}
+                    >
+                        <h3 className={`text-3xl md:text-4xl font-bold leading-snug tracking-tight ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                            {question.question}
+                        </h3>
+                        {!displayAnswer && !isRecitation && (
+                            <div className={`mt-12 flex flex-col items-center gap-2 transition-opacity duration-300 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                                <Icon name="mouse-pointer" className="w-8 h-8 animate-pulse" />
+                                <span className="text-sm font-medium">点击问题查看答案</span>
+                            </div>
+                        )}
+                    </div>
+                    
+                    {/* 2. 答案区域 */}
+                    {displayAnswer && (
+                        <div className="w-full text-left mt-8 animate-fade-in-up">
+                            <div className={`relative p-6 rounded-2xl ${isDarkMode ? 'bg-green-900/20 border border-green-900/30' : 'bg-green-50/80 border border-green-100'}`}>
+                                <div className="flex gap-4">
+                                    <div className={`mt-1 shrink-0 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`}>
+                                        <Icon name="check-circle" className="w-6 h-6" />
+                                    </div>
+                                    <div className={`text-lg leading-relaxed whitespace-pre-wrap ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                                        {question.answer}
+                                    </div>
+                                </div>
+                            </div>
+                            {/* 仅在刷题模式下显示提示 */}
+                            {!isRecitation && (
+                                <div className={`mt-4 text-center text-xs ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>
+                                    再次点击问题隐藏答案
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+
+
+            return (
+                <div className="snap-item w-full">
+                    <div className="max-w-4xl mx-auto w-full h-full flex flex-col">
+                        
+                        {CardBody}
+
+                        {/* 进度条 (底部固定) */}
+                        <div className="absolute bottom-0 left-0 right-0 p-4 pt-10">
+                            <div className="flex items-center gap-4 max-w-lg mx-auto mb-4">
+                                <span className={`text-xs font-variant-numeric tabular-nums w-8 text-right ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                    {index + 1}
+                                </span>
+                                <div className={`flex-1 h-2 rounded-full overflow-hidden ${isDarkMode ? 'bg-gray-800' : 'bg-gray-200'}`}>
+                                    <div 
+                                        className="h-full bg-blue-500 rounded-full transition-all duration-500 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
+                                        style={{ width: `${progressPercent}%` }}
+                                    ></div>
+                                </div>
+                                <span className={`text-xs font-variant-numeric tabular-nums w-8 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                    {/* 占位符，实际总数在 Header 显示 */}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        });
+
+
+        const App = () => {
+            // --- 状态定义 ---
+            const [questions, setQuestions] = useState([]);
+            const [fileName, setFileName] = useState("");
+            
+            // UI 状态
+            const [mode, setMode] = useState('quiz'); // 'quiz' (刷题) | 'recitation' (背题)
+            const [currentIndex, setCurrentIndex] = useState(0);
+            const [showAnswer, setShowAnswer] = useState(false);
+            const [isDarkMode, setIsDarkMode] = useState(false);
+            const [isRandom, setIsRandom] = useState(false);
+            const [filterCategory, setFilterCategory] = useState("all");
+            
+            // 数据持久化状态
+            const [favorites, setFavorites] = useState(new Set()); 
+            
+            const scrollRef = useRef(null);
+            
+            // --- 初始化与副作用 ---
+
+            // 1. 初始化 Lucide 图标
+            useEffect(() => {
+                lucide.createIcons();
+            }, [showAnswer, currentIndex, isDarkMode, questions]);
+
+            // 2. 加载本地存储的设置
+            useEffect(() => {
+                const savedSettings = localStorage.getItem('quiz_app_settings');
+                if (savedSettings) {
+                    const settings = JSON.parse(savedSettings);
+                    setIsDarkMode(settings.isDarkMode);
+                    setMode(settings.mode || 'quiz'); // 加载模式
+                    if (settings.isDarkMode) document.documentElement.classList.add('dark');
+                }
+            }, []);
+
+            // 3. 监听暗色模式和模式变化并保存
+            useEffect(() => {
+                if (isDarkMode) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+                localStorage.setItem('quiz_app_settings', JSON.stringify({ isDarkMode, mode }));
+            }, [isDarkMode, mode]);
+
+
+            // 4. 当文件名变化（加载新文件）时，尝试读取进度
+            useEffect(() => {
+                if (!fileName) return;
+                const fileData = localStorage.getItem(`quiz_data_${fileName}`);
+                if (fileData) {
+                    try {
+                        const data = JSON.parse(fileData);
+                        if (data.lastIndex !== undefined && data.lastIndex < questions.length) {
+                            setCurrentIndex(data.lastIndex);
+                        } else {
+                            setCurrentIndex(0);
+                        }
+                        if (data.favorites) {
+                            setFavorites(new Set(data.favorites));
+                        } else {
+                            setFavorites(new Set());
+                        }
+                    } catch(e) {
+                         console.error("Failed to load local storage data:", e);
+                         setCurrentIndex(0);
+                         setFavorites(new Set());
+                    }
+                } else {
+                    setCurrentIndex(0);
+                    setFavorites(new Set());
+                }
+                setFilterCategory("all"); 
+            }, [fileName, questions.length]); 
+
+            // 5. 自动保存进度和收藏
+            useEffect(() => {
+                if (!fileName || questions.length === 0) return;
+                const dataToSave = {
+                    lastIndex: currentIndex,
+                    favorites: Array.from(favorites)
+                };
+                localStorage.setItem(`quiz_data_${fileName}`, JSON.stringify(dataToSave));
+            }, [currentIndex, favorites, fileName, questions.length]);
+            
+            // 6. 切换题目时清空答案状态
+            useEffect(() => {
+                setShowAnswer(false);
+            }, [currentIndex, filterCategory]);
+
+            // --- 数据过滤逻辑 ---
+            const categories = useMemo(() => 
+                ["all", "favorites", ...new Set(questions.map(q => q.category).filter(Boolean))], 
+                [questions]
+            );
+
+            // 修正：确保 filteredQuestions 始终是一个数组
+            const baseFilteredQuestions = useMemo(() => {
+                let list = questions || []; // 确保从 questions 状态开始就是数组
+                
+                if (filterCategory === "favorites") {
+                    list = list.filter(q => favorites.has(q.question));
+                } else if (filterCategory !== "all") {
+                    list = list.filter(q => q.category === filterCategory);
+                }
+                return list;
+            }, [questions, filterCategory, favorites]);
+            
+            // 随机模式的处理需要特殊处理，但我们主要关注解决 length 错误
+            const filteredQuestions = useMemo(() => {
+                // 如果是随机模式，我们只在列表中保留当前的问题，但依赖 baseFilteredQuestions 的长度来做索引边界检查
+                if (isRandom && baseFilteredQuestions.length > 0) {
+                    // 如果当前索引超出范围（例如，从收藏夹切换到全部，baseFilteredQuestions变大），它会使用 baseFilteredQuestions[currentIndex]
+                    const question = baseFilteredQuestions[currentIndex] || baseFilteredQuestions[0];
+                    return [question].filter(Boolean);
+                }
+                
+                return baseFilteredQuestions;
+
+            }, [isRandom, baseFilteredQuestions, currentIndex]);
+            
+            // 7. 滚动到当前索引位置 (模拟页面切换)
+            useEffect(() => {
+                if (scrollRef.current && currentIndex >= 0) {
+                    const listToScroll = isRandom ? baseFilteredQuestions : filteredQuestions;
+                    const indexInFullList = isRandom 
+                        ? baseFilteredQuestions.findIndex(q => q.question === filteredQuestions[0]?.question) 
+                        : currentIndex;
+                    
+                    if (indexInFullList < 0) return; // 找不到题目，退出
+
+                    // 使用 setTimeout 确保 DOM 渲染完成
+                    const timer = setTimeout(() => {
+                        scrollRef.current.scrollTo({
+                            top: indexInFullList * scrollRef.current.clientHeight,
+                            behavior: 'smooth'
+                        });
+                    }, 50);
+                    return () => clearTimeout(timer);
+                }
+            }, [currentIndex, isRandom, filteredQuestions.length]); 
+
+            // 8. 监听滚动事件更新 currentIndex
+            const handleScroll = () => {
+                const list = filteredQuestions; 
+                // 修正：确保 list 存在且非空
+                if (!scrollRef.current || !list || list.length === 0) return;
+
+                if (scrollRef.current.scrollTimeout) {
+                    clearTimeout(scrollRef.current.scrollTimeout);
+                }
+
+                scrollRef.current.scrollTimeout = setTimeout(() => {
+                    const scrollPosition = scrollRef.current.scrollTop;
+                    const itemHeight = scrollRef.current.clientHeight;
+                    
+                    if(itemHeight === 0) return; // 避免除以零
+                    
+                    const newIndex = Math.round(scrollPosition / itemHeight);
+                    
+                    if (newIndex !== currentIndex) {
+                        const safeIndex = Math.min(Math.max(0, newIndex), list.length - 1); 
+                        setCurrentIndex(safeIndex);
+                    }
+                }, 100); 
+            };
+            
+            // 9. 确保索引有效
+            useEffect(() => {
+                if (currentIndex >= filteredQuestions.length && filteredQuestions.length > 0) {
+                    setCurrentIndex(0);
+                } else if (filteredQuestions.length === 0) {
+                    setCurrentIndex(-1);
+                }
+            }, [filteredQuestions.length]);
+
+
+            // --- 渲染辅助变量 ---
+            const currentQuestion = filteredQuestions[currentIndex];
+            const isCurrentFavorite = currentQuestion && favorites.has(currentQuestion.question);
+            const totalQuestions = filteredQuestions.length;
+
+
+            // --- 辅助函数 ---
+            const toggleFavorite = (e) => {
+                e.stopPropagation(); 
+                const currentQ = filteredQuestions[currentIndex];
+                if (!currentQ) return;
+                
+                const key = currentQ.question;
+                
+                const newFavs = new Set(favorites);
+                if (newFavs.has(key)) {
+                    newFavs.delete(key);
+                } else {
+                    newFavs.add(key);
+                }
+                setFavorites(newFavs);
+            };
+
+            const handleFileUpload = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                event.target.value = null; 
+                setFileName(file.name);
+                const reader = new FileReader();
+                
+                reader.onload = (e) => {
+                    const content = e.target.result;
+                    try {
+                        let data;
+                        if (file.name.endsWith('.yaml') || file.name.endsWith('.yml')) {
+                            data = jsyaml.load(content);
+                        } else {
+                            data = JSON.parse(content);
+                        }
+                        
+                        let qs = [];
+                        if (Array.isArray(data)) {
+                            qs = data;
+                        } else if (data.questions) {
+                            qs = data.questions;
+                        } else {
+                            alert("文件格式不正确，找不到 questions 数组");
+                            return;
+                        }
+                        setQuestions(qs);
+                        setShowAnswer(false);
+                    } catch (error) {
+                        alert("解析文件失败: " + error.message);
+                    }
+                };
+                reader.readAsText(file);
+            };
+
+
+            // 1. 空状态 / 欢迎页
+            if (questions.length === 0) {
+                return (
+                    <div className={`min-h-screen flex items-center justify-center p-6 transition-colors duration-500 ${isDarkMode ? 'bg-black text-white' : 'bg-[#F2F2F7] text-gray-800'}`}>
+                        <div className={`max-w-md w-full text-center p-10 rounded-3xl shadow-2xl transition-all duration-300 ${isDarkMode ? 'bg-[#1C1C1E] border border-gray-800' : 'bg-white'}`}>
+                            <div className="flex justify-center mb-6">
+                                <div className="p-4 bg-gradient-to-tr from-blue-500 to-cyan-400 rounded-2xl shadow-glow">
+                                    <Icon name="book-open" className="w-10 h-10 text-white" />
+                                </div>
+                            </div>
+                            <h1 className="text-3xl font-bold mb-4 tracking-tight">开始复习</h1>
+                            <p className={`mb-8 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                上传你的配置文件 (JSON/YAML) <br/> 体验全新的刷题方式
+                            </p>
+                            
+                            <label className="group cursor-pointer relative inline-flex items-center justify-center px-8 py-4 font-semibold text-white transition-all duration-200 bg-blue-600 rounded-full hover:bg-blue-700 active:scale-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600 shadow-lg shadow-blue-500/30 overflow-hidden">
+                                <span className="relative flex items-center gap-2">
+                                    <Icon name="upload-cloud" className="w-5 h-5" />
+                                    选择文件
+                                </span>
+                                <input type="file" accept=".json,.yaml,.yml" onChange={handleFileUpload} className="hidden" />
+                            </label>
+
+                            <div className="mt-8 flex justify-center gap-4">
+                                <button 
+                                    onClick={() => setIsDarkMode(!isDarkMode)}
+                                    className={`p-3 rounded-full transition-colors ${isDarkMode ? 'bg-gray-800 text-yellow-400 hover:bg-gray-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                >
+                                    <Icon name={isDarkMode ? "sun" : "moon"} className="w-5 h-5" />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            // 2. 筛选结果为空
+            if (totalQuestions === 0) {
+                 return (
+                    <div className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors ${isDarkMode ? 'bg-black text-white' : 'bg-[#F2F2F7] text-gray-800'}`}>
+                        <div className="text-center">
+                            <Icon name="inbox" className={`w-16 h-16 mx-auto mb-4 ${isDarkMode ? 'text-gray-700' : 'text-gray-300'}`} />
+                            <p className="text-lg font-medium mb-2">没有找到题目</p>
+                            <p className={`text-sm mb-6 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                {filterCategory === "favorites" ? "你还没有收藏任何题目" : "该分类下暂时没有内容"}
+                            </p>
+                            <button 
+                                onClick={() => setFilterCategory("all")} 
+                                className="px-6 py-2.5 bg-blue-600 text-white rounded-full font-medium shadow-lg shadow-blue-500/30 hover:bg-blue-700 active:scale-95 transition-all"
+                            >
+                                返回全部
+                            </button>
+                        </div>
+                    </div>
+                 )
+            }
+
+            // 3. 主界面
+            return (
+                <div className={`h-screen transition-colors duration-300 ${isDarkMode ? 'bg-black text-white' : 'bg-[#F2F2F7] text-gray-900'}`}>
+                    
+                    {/* 滚动卡片列表 */}
+                    <div 
+                        ref={scrollRef} 
+                        className="snap-scroll-y no-scrollbar"
+                        onScroll={handleScroll}
+                    >
+                        {filteredQuestions.map((q, index) => (
+                            <QuestionCard 
+                                key={q.question} 
+                                question={q} 
+                                index={index} 
+                                mode={mode}
+                                isCurrent={index === currentIndex}
+                                isDarkMode={isDarkMode}
+                                favorites={favorites}
+                                toggleFavorite={toggleFavorite}
+                                showAnswer={index === currentIndex ? showAnswer : false}
+                                setShowAnswer={setShowAnswer}
+                                totalQuestions={totalQuestions} 
+                            />
+                        ))}
+                    </div>
+
+                    {/* 顶部控制栏 (Header) */}
+                    <header className={`fixed top-0 left-0 right-0 z-50 px-4 py-3 backdrop-blur-md border-b transition-colors duration-300 ${isDarkMode ? 'bg-black/70 border-gray-800' : 'bg-white/70 border-gray-200'}`}>
+                        <div className="max-w-3xl mx-auto flex justify-between items-center h-10">
+                            
+                            {/* 文件信息和模式切换 */}
+                            <div className="flex items-center gap-3">
+                                {/* 模式切换 */}
+                                <div className={`flex p-1 rounded-full text-sm font-medium transition-colors ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                                    <button 
+                                        onClick={() => setMode('quiz')}
+                                        className={`px-3 py-1 rounded-full transition-colors active:scale-95 ${mode === 'quiz' ? 'bg-blue-500 text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        刷题模式
+                                    </button>
+                                    <button 
+                                        onClick={() => setMode('recitation')}
+                                        className={`px-3 py-1 rounded-full transition-colors active:scale-95 ${mode === 'recitation' ? 'bg-blue-500 text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        背题模式
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            {/* 筛选和设置 */}
+                            <div className="flex items-center gap-2">
+                                {/* 分类筛选 */}
+                                <div className="relative group">
+                                    <select 
+                                        value={filterCategory}
+                                        onChange={(e) => {
+                                            setFilterCategory(e.target.value);
+                                            setCurrentIndex(0); 
+                                            setShowAnswer(false);
+                                        }}
+                                        className={`appearance-none pl-3 pr-8 py-1 rounded-full text-xs font-medium border transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDarkMode ? 'bg-gray-900 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'}`}
+                                    >
+                                        <option value="all">📚 全部</option>
+                                        <option value="favorites">⭐️ 收藏 ({favorites.size})</option>
+                                        {categories.filter(c => c !== "all" && c !== "favorites").map(c => (
+                                            <option key={c} value={c}>{c.split('、')[1] || c}</option>
+                                        ))}
+                                    </select>
+                                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+                                        <Icon name="chevron-down" className={`w-3 h-3 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+                                    </div>
+                                </div>
+                                
+                                {/* 随机模式 */}
+                                <button 
+                                    onClick={() => setIsRandom(!isRandom)}
+                                    className={`p-2 rounded-full transition-all active:scale-90 ${isRandom 
+                                        ? 'text-blue-500 bg-blue-500/10'
+                                        : isDarkMode ? 'text-gray-400 hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-200'
+                                    }`}
+                                    title={isRandom ? "当前为随机模式" : "切换到随机模式"}
+                                >
+                                    <Icon name="shuffle" className="w-5 h-5" />
+                                </button>
+                                
+                                {/* 暗色模式切换 */}
+                                <button 
+                                    onClick={() => setIsDarkMode(!isDarkMode)}
+                                    className={`p-2 rounded-full transition-all active:scale-90 ${isDarkMode ? 'text-yellow-400 hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-200'}`}
+                                    title="切换主题"
+                                >
+                                    <Icon name={isDarkMode ? "sun" : "moon"} className="w-5 h-5" />
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+                    
+                    {/* 右侧操作栏 (TikTok 风格) */}
+                    {totalQuestions > 0 && currentQuestion && (
+                        <div className="fixed right-0 top-1/2 transform -translate-y-1/2 mr-4 z-40 flex flex-col gap-4">
+                            
+                            {/* 收藏按钮 */}
+                            <button 
+                                onClick={toggleFavorite}
+                                className={`flex flex-col items-center justify-center p-3 rounded-full transition-all active:scale-90 shadow-md ${isCurrentFavorite ? 'text-yellow-400 bg-yellow-400/10' : isDarkMode ? 'text-white bg-gray-800/80 hover:bg-gray-800' : 'text-gray-700 bg-white/80 hover:bg-white'}`}
+                                title={isCurrentFavorite ? "取消收藏" : "收藏题目"}
+                            >
+                                <Icon name="star" className={`w-7 h-7 ${isCurrentFavorite ? 'fill-current' : ''}`} />
+                                <span className="text-xs mt-1">{isCurrentFavorite ? '已收藏' : '收藏'}</span>
+                            </button>
+
+                             {/* 进度显示 */}
+                            <div className={`flex flex-col items-center text-xs mt-2 ${isDarkMode ? 'text-gray-500' : 'text-gray-600'}`}>
+                                <span>{currentIndex + 1}</span>
+                                <span>/</span>
+                                <span>{totalQuestions}</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
