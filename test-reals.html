@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>复习提纲刷题器</title>
+    <title>Test Reals</title>
     <!-- 引入 React 和 ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -96,8 +96,8 @@
             // 背题下答案始终显示
             const displayAnswer = isRecitation || showAnswer;
             
-            // 计算进度条百分比
-            const progressPercent = totalQuestions > 0 ? ((index + 1) / totalQuestions) * 100 : 0;
+            // 进度条百分比 (虽然已移除，但留着计算备用)
+            // const progressPercent = totalQuestions > 0 ? ((index + 1) / totalQuestions) * 100 : 0;
 
             // 仅在刷题下，点击问题切换答案
             const handleCardClick = () => {
@@ -156,23 +156,7 @@
                         
                         {CardBody}
 
-                        {/* 进度条 (底部固定) */}
-                        <div className="absolute bottom-0 left-0 right-0 p-4 pt-10">
-                            <div className="flex items-center gap-4 max-w-lg mx-auto mb-4">
-                                <span className={`text-xs font-variant-numeric tabular-nums w-8 text-right ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                                    {index + 1}
-                                </span>
-                                <div className={`flex-1 h-2 rounded-full overflow-hidden ${isDarkMode ? 'bg-gray-800' : 'bg-gray-200'}`}>
-                                    <div 
-                                        className="h-full bg-blue-500 rounded-full transition-all duration-500 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
-                                        style={{ width: `${progressPercent}%` }}
-                                    ></div>
-                                </div>
-                                <span className={`text-xs font-variant-numeric tabular-nums w-8 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                                    {/* 占位符，实际总数在 Header 显示 */}
-                                </span>
-                            </div>
-                        </div>
+                        {/* 进度条 (底部固定) - 已移除 */}
                     </div>
                 </div>
             );
@@ -304,10 +288,7 @@
             // 7. 滚动到当前索引位置 (模拟页面切换)
             useEffect(() => {
                 if (scrollRef.current && currentIndex >= 0) {
-                    const listToScroll = isRandom ? baseFilteredQuestions : filteredQuestions;
-                    const indexInFullList = isRandom 
-                        ? baseFilteredQuestions.findIndex(q => q.question === filteredQuestions[0]?.question) 
-                        : currentIndex;
+                    const indexInFullList = currentIndex; // 在 filteredQuestions 列表中已经是正确的索引
                     
                     if (indexInFullList < 0) return; // 找不到题目，退出
 
